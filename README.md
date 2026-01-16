@@ -69,22 +69,16 @@ Built for people who want a fast, sleek “single pane of glass” for services 
 
 ## Getting Started
 
-### 1) Clone
+### 1) Clone the repo and Install dependencies
 
 ```bash
-git clone https://github.com/<your-org>/<your-repo>.git
-cd <your-repo>
-```
-
-### 2) Install dependencies
-
-```bash
+cd repo_folder
 pnpm install
 ```
 
-> (Or use `npm` / `yarn` depending on your repo.)
+> (Or use `npm` / `yarn` depending on your preference.)
 
-### 3) Configure environment variables
+### 2) Configure environment variables
 
 Create `.env.local`:
 
@@ -233,7 +227,7 @@ MIT
 
 ---
 
-## 🙌 Credits
+## Credits
 
 Built with:
 
