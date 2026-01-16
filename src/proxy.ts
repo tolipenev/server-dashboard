@@ -1,8 +1,8 @@
 // src/middleware.ts
 
-import {getToken} from "next-auth/jwt";
-import type {NextRequest} from "next/server";
-import {NextResponse} from "next/server";
+import { getToken } from "next-auth/jwt";
+import type { NextRequest } from "next/server";
+import { NextResponse } from "next/server";
 
 /**
  * -------------------
@@ -22,7 +22,7 @@ const MAX_REQUESTS_PER_WINDOW = 100; // sliding window max requests/IP
  * and reset on cold start/redeploy. For production-grade rate limiting,
  * use a shared store (e.g., Redis/Upstash).
  */
-const backoff = new Map<string, {count: number; last: number}>();
+const backoff = new Map<string, { count: number; last: number }>();
 const ipWindows = new Map<string, number[]>();
 
 /**
@@ -38,21 +38,6 @@ const SKIP_PREFIXES = [
   "/robots.txt",
   "/sitemap.xml",
 ];
-
-/**
- * -------------------
- * Trusted IPs (optional)
- * -------------------
- * TRUSTED_IPS: comma-separated exact IPs (e.g. "127.0.0.1,192.168.0.106")
- * HOME_IP_RANGE: prefix match (e.g. "192.168.0")
- */
-const TRUSTED = new Set(
-  (process.env.TRUSTED_IPS || "")
-    .split(",")
-    .map((s) => s.trim())
-    .filter(Boolean),
-);
-const HOME_PREFIX = (process.env.HOME_IP_RANGE || "").trim();
 
 /**
  * Helpers
@@ -76,13 +61,6 @@ function isPublicPath(pathname: string) {
 
 function getClientIp(req: NextRequest) {
   return (req.headers.get("x-forwarded-for") || "unknown").split(",")[0].trim();
-}
-
-function isTrustedIp(ip: string) {
-  if (!ip || ip === "unknown") return false;
-  if (TRUSTED.has(ip)) return true;
-  if (HOME_PREFIX && ip.startsWith(HOME_PREFIX)) return true;
-  return false;
 }
 
 function applySecurityHeaders(res: NextResponse) {
@@ -113,25 +91,25 @@ function rateLimitOk(ip: string, now: number) {
 }
 
 function backoffAllowed(ip: string, now: number) {
-  const info = backoff.get(ip) || {count: 0, last: 0};
+  const info = backoff.get(ip) || { count: 0, last: 0 };
   if (info.count >= MAX_ATTEMPTS) {
     const delay = BASE_DELAY_MS * info.count;
     if (now - info.last < delay) {
       return false; // still cooling down
     }
     // cooldown passed; reset
-    backoff.set(ip, {count: 0, last: 0});
+    backoff.set(ip, { count: 0, last: 0 });
   }
   return true;
 }
 
 function registerBackoffStrike(ip: string, now: number) {
-  const info = backoff.get(ip) || {count: 0, last: 0};
-  backoff.set(ip, {count: info.count + 1, last: now});
+  const info = backoff.get(ip) || { count: 0, last: 0 };
+  backoff.set(ip, { count: info.count + 1, last: now });
 }
 
 export async function proxy(req: NextRequest) {
-  const {pathname} = req.nextUrl;
+  const { pathname } = req.nextUrl;
 
   // Skip for static files / api / Next assets
   if (isStaticAsset(pathname)) {
@@ -139,7 +117,7 @@ export async function proxy(req: NextRequest) {
   }
 
   // Auth (via NextAuth JWT)
-  const token = await getToken({req, secret: process.env.NEXTAUTH_SECRET});
+  const token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET });
 
   // Allow the login page when logged out; bounce home if already logged in
   if (isPublicPath(pathname)) {
@@ -158,29 +136,26 @@ export async function proxy(req: NextRequest) {
     return applySecurityHeaders(NextResponse.redirect(url));
   }
 
-  // ---- Rate limiting & backoff (skip for trusted IPs) ----
+  // ---- Rate limiting & backoff (applies to everyone) ----
   const ip = getClientIp(req);
   const now = Date.now();
 
-  if (!isTrustedIp(ip)) {
-    // Backoff window check first (if they recently hit limits)
-    if (!backoffAllowed(ip, now)) {
-      const res = new NextResponse("Too many attempts. Try later.", {
-        status: 429,
-      });
-      return applySecurityHeaders(res);
-    }
+  // Backoff window check first (if they recently hit limits)
+  if (!backoffAllowed(ip, now)) {
+    const res = new NextResponse("Too many attempts. Try later.", {
+      status: 429,
+    });
+    return applySecurityHeaders(res);
+  }
 
-    // Sliding window rate limit
-    const ok = rateLimitOk(ip, now);
-    if (!ok) {
-      registerBackoffStrike(ip, now);
-      const res = new NextResponse(
-        "Too many requests, please try again later.",
-        {status: 429},
-      );
-      return applySecurityHeaders(res);
-    }
+  // Sliding window rate limit
+  const ok = rateLimitOk(ip, now);
+  if (!ok) {
+    registerBackoffStrike(ip, now);
+    const res = new NextResponse("Too many requests, please try again later.", {
+      status: 429,
+    });
+    return applySecurityHeaders(res);
   }
 
   // Success path
